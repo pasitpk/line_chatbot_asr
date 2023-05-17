@@ -6,3 +6,5 @@ python-multipart==0.0.6
 fastapi==0.94.1
 uvicorn[standard]==0.21.0
 line-bot-sdk==2.4.2
+marisa_trie==0.8.0
+pythainlp==4.0.1

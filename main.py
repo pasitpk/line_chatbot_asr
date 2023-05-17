@@ -1,3 +1,4 @@
+import pickle
 import json
 import io
 import torch
@@ -13,12 +14,19 @@ from linebot.exceptions import InvalidSignatureError
 from linebot.models import AudioMessage, MessageEvent, TextSendMessage
 from pydantic import BaseModel
 
+from corrector import DeepGICorrector
+
 with open('.json', 'r') as f:
     config = json.load(f)
 
 line_bot_api = LineBotApi(config['LINE_CHANNEL_ACCESS_TOKEN'])
 handler = WebhookHandler(config['LINE_CHANNEL_SECRET'])
 asr_pipe = config['ASR_PIPE']
+
+with open(config['CUSTOM_DICT'], 'rb') as f:
+    custom_dict = pickle.load(f)
+
+corrector = DeepGICorrector(custom_dict, lower_case=True)
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -64,6 +72,7 @@ def transcribe(message_content):
     audio, sampling_rate = get_audio(message_content)
     audio = audio.mean(1)
     text = pipe({'raw': audio, 'sampling_rate': sampling_rate})['text']
+    text = corrector.correct(text)
     return text
 
 
