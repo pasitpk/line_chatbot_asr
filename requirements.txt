@@ -8,3 +8,6 @@ uvicorn[standard]==0.21.0
 line-bot-sdk==2.4.2
 marisa_trie==0.8.0
 pythainlp==4.0.1
+onnx
+onnxruntime-gpu
+optimum[onnxruntime-gpu]

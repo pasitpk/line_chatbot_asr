@@ -4,7 +4,8 @@ import io
 import torch
 import pydub
 import numpy as np
-from transformers import pipeline
+from transformers import pipeline, WhisperForConditionalGeneration,WhisperProcessor
+from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
 
 from typing import List, Optional
 
@@ -21,8 +22,8 @@ with open('.json', 'r') as f:
 
 LINE_BOT_API = LineBotApi(config['LINE_CHANNEL_ACCESS_TOKEN'])
 HANDLER = WebhookHandler(config['LINE_CHANNEL_SECRET'])
-ASR_PIPE = config['ASR_PIPE']  # for Line Messaging API
-ASR_PIPE2 = config['ASR_PIPE2']  # for regular requests
+ASR_PIPE = config['ASR_PIPE']
+MAX_TOKENS = config['MAX_TOKENS']
 CORRECTION = config['CORRECTION']
 
 with open(config['CUSTOM_DICT'], 'rb') as f:
@@ -31,16 +32,17 @@ with open(config['CUSTOM_DICT'], 'rb') as f:
 corrector = DeepGICorrector(custom_dict, lower_case=True)
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-pipe = pipeline("automatic-speech-recognition",
-                    model=ASR_PIPE,
-                    max_new_tokens=50,
-                    device=device,
-                    )
-
-pipe2 = pipeline("automatic-speech-recognition",
-                    model=ASR_PIPE2,
-                    device=device,
-                    )
+model = ORTModelForSpeechSeq2Seq.from_pretrained(ASR_PIPE,use_io_binding=True,providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+processor = WhisperProcessor.from_pretrained(ASR_PIPE) 
+pipe = pipeline(
+    task="automatic-speech-recognition",
+    model=model,
+    feature_extractor=processor.feature_extractor,
+    tokenizer=processor.tokenizer,
+    chunk_length_s=30,
+    max_new_tokens=MAX_TOKENS,
+    device=device,
+)
 
 app = FastAPI()
 
@@ -58,7 +60,7 @@ async def root():
 async def transcribe_file(file: UploadFile = File(...)):
     file.file.seek = lambda *args: None
     audio = pydub.AudioSegment.from_file(file.file)
-    text = pipe2(audio.export(format='wav').read())['text']
+    text = pipe(audio.export(format='wav').read())['text']
     if CORRECTION:
         text = corrector.correct(text)
     res = {
