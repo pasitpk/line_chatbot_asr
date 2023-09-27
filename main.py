@@ -8,8 +8,10 @@ from transformers import pipeline, WhisperForConditionalGeneration,WhisperProces
 from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
 
 from typing import List, Optional
+from datetime import datetime
 
 from fastapi import HTTPException, Header, Request, FastAPI, File, UploadFile, Query
+from fastapi.middleware.cors import CORSMiddleware
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import AudioMessage, MessageEvent, TextSendMessage
@@ -48,6 +50,16 @@ pipe = pipeline(
 
 app = FastAPI()
 
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 class Line(BaseModel):
     destination: str
     events: List[Optional[None]]
@@ -60,7 +72,7 @@ async def root():
 
 @app.get("/transcripts/")
 async def get_transcripts(n: int = Query(ge=1)):
-    return {"transcripts": transcript_log[-n:]}
+    return transcript_log[-n:]
 
 
 @app.post("/transcribe/")
@@ -99,7 +111,7 @@ def transcribe(audio):
     text = pipe(audio.export(format='wav').read())['text']
     if CORRECTION:
         text = corrector.correct(text)
-    transcript_log.append(text)
+    transcript_log.append({'text': text, 'timestamp': str(datetime.now())})
     transcript_log[:] = transcript_log[-MAX_LOG_SIZE:]
     return text
 
