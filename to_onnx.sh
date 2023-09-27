@@ -1,1 +1,1 @@
-python to_onnx.py --model_path="../asr_pipe.hg" --save_dir="../asr_pipe.onnx" --optimize_for_gpu
+python to_onnx.py --model_path="../models/asr_thonburian_small_d7.hg" --save_dir="../models/asr_thonburian_small_d7.onnx" --optimize_for_gpu

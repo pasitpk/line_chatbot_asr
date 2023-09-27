@@ -9,7 +9,7 @@ from optimum.onnxruntime import ORTModelForSpeechSeq2Seq
 
 from typing import List, Optional
 
-from fastapi import HTTPException, Header, Request, FastAPI, File, UploadFile
+from fastapi import HTTPException, Header, Request, FastAPI, File, UploadFile, Query
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import AudioMessage, MessageEvent, TextSendMessage
@@ -25,6 +25,8 @@ HANDLER = WebhookHandler(config['LINE_CHANNEL_SECRET'])
 ASR_PIPE = config['ASR_PIPE']
 MAX_TOKENS = config['MAX_TOKENS']
 CORRECTION = config['CORRECTION']
+MAX_LOG_SIZE = config['MAX_LOG_SIZE']
+transcript_log = []
 
 with open(config['CUSTOM_DICT'], 'rb') as f:
     custom_dict = pickle.load(f)
@@ -56,13 +58,16 @@ async def root():
     return {"message": "Hello, DeepGI"}
 
 
+@app.get("/transcripts/")
+async def get_transcripts(n: int = Query(ge=1)):
+    return {"transcripts": transcript_log[-n:]}
+
+
 @app.post("/transcribe/")
 async def transcribe_file(file: UploadFile = File(...)):
     file.file.seek = lambda *args: None
     audio = pydub.AudioSegment.from_file(file.file)
-    text = pipe(audio.export(format='wav').read())['text']
-    if CORRECTION:
-        text = corrector.correct(text)
+    text = transcribe(audio)
     res = {
         'text': text
     }
@@ -82,18 +87,20 @@ async def callback(request: Request, x_line_signature: str = Header(None)):
 @HANDLER.add(MessageEvent, message=AudioMessage)
 def message_text(event):
     message_content = LINE_BOT_API.get_message_content(event.message.id)
-    text = transcribe(message_content)
+    audio = get_audio(message_content)
+    text = transcribe(audio)
     LINE_BOT_API.reply_message(
         event.reply_token,
         TextSendMessage(text=text)
     )
 
 
-def transcribe(message_content):
-    audio = get_audio(message_content)
+def transcribe(audio):
     text = pipe(audio.export(format='wav').read())['text']
     if CORRECTION:
         text = corrector.correct(text)
+    transcript_log.append(text)
+    transcript_log[:] = transcript_log[-MAX_LOG_SIZE:]
     return text
 
 
